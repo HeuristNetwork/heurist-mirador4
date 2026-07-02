@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Heurist Mirador 4 Test</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <style>
+    html,
+    body,
+    #mirador {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="mirador"></div>
+
+  <script>
+    window.heuristMiradorConfig = {
+      id: 'mirador',
+      manifestUrl: '/heurist/api/osmak_anno12/iiif/manifest/1?omit_annotation_pages=1',
+
+      db: 'osmak_anno12',
+      recID: 1,
+
+      // Base annotation endpoint, not the page endpoint.
+      annotationServerUrl: '/heurist/api/osmak_anno12/annotations',
+
+      readonly: false,
+      annotationMode: 'heurist',
+
+      // Vite-dev only: canonical Heurist origin, without port 5173.
+      rewriteLocalIiifUrls: true,
+      heuristCanonicalBaseUrl: 'http://127.0.0.1'
+    };    
+    /* local
+    window.heuristMiradorConfig = {
+      id: 'mirador',
+      manifestUrl: 'http://127.0.0.1:5173/heurist/api/osmak_anno12/iiif/manifest/1',
+      //manifestUrl: 'https://iiif.harvardartmuseums.org/manifests/object/299843',
+      readonly: false,
+      annotationMode: 'localStorage',
+      // Vite-dev only: rewrite absolute local Heurist URLs inside manifest.
+      rewriteLocalIiifUrls: true      
+    };
+    */
+  </script>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
