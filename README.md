@@ -1,0 +1,1 @@
+Mirador v4 integration/bundle for Heurist with MAE annotation support.
