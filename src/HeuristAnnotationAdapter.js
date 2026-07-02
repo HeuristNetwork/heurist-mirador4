@@ -1,3 +1,5 @@
+import { HeuristMaeAnnotationMapper } from './HeuristMaeAnnotationMapper.js';
+
 function trimTrailingSlash(value) {
   return String(value || '').replace(/\/+$/, '');
 }
@@ -11,119 +13,51 @@ function buildAnnotationPageUrl(annotationServerUrl, canvasId) {
   return url.toString();
 }
 
-function normaliseAnnotationPage(data, fallbackPageId) {
-  if (!data) {
+function buildAnnotationUrl(annotationServerUrl, annotationId = null) {
+  const base = trimTrailingSlash(annotationServerUrl);
+
+  if (!annotationId) {
+    return new URL(base, window.location.origin).toString();
+  }
+
+  return new URL(`${base}/${encodeURIComponent(annotationId)}`, window.location.origin).toString();
+}
+
+function getAnnotationId(annotationOrId) {
+  if (typeof annotationOrId === 'string') {
+    return annotationOrId;
+  }
+
+  return annotationOrId?.id || null;
+}
+
+async function parseJsonResponse(response) {
+  const text = await response.text();
+
+  if (!text) {
     return null;
   }
 
-  if (data.type === 'AnnotationPage' && Array.isArray(data.items)) {
-    return data;
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    console.warn('[HeuristAnnotationAdapter] non-JSON response', text);
+    return null;
   }
-
-  if (Array.isArray(data)) {
-    return {
-      id: fallbackPageId,
-      type: 'AnnotationPage',
-      items: data
-    };
-  }
-
-  if (Array.isArray(data.items)) {
-    return {
-      id: data.id || fallbackPageId,
-      type: data.type || 'AnnotationPage',
-      items: data.items
-    };
-  }
-
-  if (Array.isArray(data.resources)) {
-    return {
-      id: data.id || fallbackPageId,
-      type: 'AnnotationPage',
-      items: data.resources
-    };
-  }
-
-  if (Array.isArray(data.annotations)) {
-    return {
-      id: data.id || fallbackPageId,
-      type: 'AnnotationPage',
-      items: data.annotations
-    };
-  }
-
-  return {
-    id: data.id || fallbackPageId,
-    type: 'AnnotationPage',
-    items: []
-  };
 }
 
-function convertRelativeHeuristUrlToCanonical(value, canonicalBaseUrl) {
-  if (!value || typeof value !== 'string' || !canonicalBaseUrl) {
-    return value;
+function assertWriteOk(response, data, action) {
+  if (!response.ok) {
+    throw new Error(
+      `Heurist annotation ${action} failed: HTTP ${response.status} ${response.statusText}`
+    );
   }
 
-  if (value.startsWith('/heurist/')) {
-    return `${trimTrailingSlash(canonicalBaseUrl)}${value}`;
+  if (data && data.status && data.status !== 'ok' && data.status !== 'OK') {
+    throw new Error(
+      `Heurist annotation ${action} failed: ${data.message || data.status}`
+    );
   }
-
-  return value;
-}
-
-function replaceCanvasIdInString(value, fromCanvasId, toCanvasId) {
-  if (
-    typeof value !== 'string' ||
-    !fromCanvasId ||
-    !toCanvasId ||
-    fromCanvasId === toCanvasId
-  ) {
-    return value;
-  }
-
-  // Exact canvas id.
-  if (value === fromCanvasId) {
-    return toCanvasId;
-  }
-
-  // Canvas id with fragment selector, for example:
-  // http://.../canvas/abc#xywh=...
-  if (value.startsWith(`${fromCanvasId}#`)) {
-    return `${toCanvasId}${value.substring(fromCanvasId.length)}`;
-  }
-
-  // Canvas id with query or other suffix, less common but safe.
-  if (value.startsWith(`${fromCanvasId}?`)) {
-    return `${toCanvasId}${value.substring(fromCanvasId.length)}`;
-  }
-
-  return value;
-}
-
-function replaceCanvasIdDeep(value, fromCanvasId, toCanvasId) {
-  if (!fromCanvasId || !toCanvasId) {
-    return value;
-  }
-
-  if (typeof value === 'string') {
-    return replaceCanvasIdInString(value, fromCanvasId, toCanvasId);
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => replaceCanvasIdDeep(item, fromCanvasId, toCanvasId));
-  }
-
-  if (value && typeof value === 'object') {
-    const result = {};
-
-    Object.entries(value).forEach(([key, item]) => {
-      result[key] = replaceCanvasIdDeep(item, fromCanvasId, toCanvasId);
-    });
-
-    return result;
-  }
-
-  return value;
 }
 
 export class HeuristAnnotationAdapter {
@@ -138,7 +72,7 @@ export class HeuristAnnotationAdapter {
     this.heuristCanonicalBaseUrl = options.heuristCanonicalBaseUrl || null;
 
     // Canvas id used to query Heurist annotation endpoint.
-    this.lookupCanvasId = convertRelativeHeuristUrlToCanonical(
+    this.lookupCanvasId = HeuristMaeAnnotationMapper.canonicalCanvasId(
       this.canvasId,
       this.heuristCanonicalBaseUrl
     );
@@ -147,6 +81,12 @@ export class HeuristAnnotationAdapter {
     this.canvasRecId = options.canvasRecId || null;
     this.userLabel = options.userLabel || 'Heurist user';
     this.readonly = !!options.readonly;
+
+    this.mapper = new HeuristMaeAnnotationMapper({
+      canvasId: this.canvasId,
+      lookupCanvasId: this.lookupCanvasId,
+      userLabel: this.userLabel
+    });
 
     this.annotationPageId = this.annotationServerUrl && this.lookupCanvasId
       ? buildAnnotationPageUrl(this.annotationServerUrl, this.lookupCanvasId)
@@ -166,49 +106,6 @@ export class HeuristAnnotationAdapter {
 
   getStorageAdapterUser() {
     return this.userLabel || 'Heurist user';
-  }
-
-  normalisePageForMirador(page) {
-    if (!page || !Array.isArray(page.items)) {
-      return page;
-    }
-
-    // Heurist returns annotations targeting canonical canvas URI.
-    // In Vite dev, Mirador may know the same canvas as /heurist/api/...
-    // Rewrite canonical target values to the current display canvas id.
-    if (!this.lookupCanvasId || !this.canvasId || this.lookupCanvasId === this.canvasId) {
-      return page;
-    }
-
-    const rewrittenItems = page.items.map((annotation) =>
-      replaceCanvasIdDeep(annotation, this.lookupCanvasId, this.canvasId)
-    );
-
-    console.log('[HeuristAnnotationAdapter] target rewrite sample', {
-      lookupCanvasId: this.lookupCanvasId,
-      canvasId: this.canvasId,
-      before: page.items[0],
-      after: rewrittenItems[0]
-    });
-
-    return {
-      ...page,
-      items: rewrittenItems
-    };
-  }
-
-  normaliseAnnotationForHeurist(annotation) {
-    if (!annotation) {
-      return annotation;
-    }
-
-    // Before save/update, convert the current display canvas id back
-    // to the canonical Heurist canvas URI.
-    if (!this.lookupCanvasId || !this.canvasId || this.lookupCanvasId === this.canvasId) {
-      return annotation;
-    }
-
-    return replaceStringDeep(annotation, this.canvasId, this.lookupCanvasId);
   }
 
   async all() {
@@ -246,15 +143,15 @@ export class HeuristAnnotationAdapter {
     }
 
     const data = await response.json();
-    const page = normaliseAnnotationPage(data, url);
-    const miradorPage = this.normalisePageForMirador(page);
+    const page = this.mapper.normalizePage(data, url);
+    const maePage = this.mapper.pageToMAE(page);
 
     console.log('[HeuristAnnotationAdapter] annotation page', {
       raw: page,
-      mirador: miradorPage
+      mae: maePage
     });
 
-    return miradorPage;
+    return maePage;
   }
 
   async get(annotationId) {
@@ -274,34 +171,142 @@ export class HeuristAnnotationAdapter {
       throw new Error('HeuristAnnotationAdapter is readonly');
     }
 
-    const heuristAnnotation = this.normaliseAnnotationForHeurist(annotation);
+    if (!this.annotationServerUrl) {
+      throw new Error('Missing annotationServerUrl');
+    }
 
-    console.log('[HeuristAnnotationAdapter] create normalised for Heurist', heuristAnnotation);
+    //console.log('[HeuristAnnotationAdapter] POST', annotation);
+    //return;
 
-    throw new Error('HeuristAnnotationAdapter.create is not implemented yet');
+    const heuristAnnotation = {
+      ...this.mapper.toWebAnnotation(annotation),
+      source: 'mirador'
+    };
+
+    if (this.manifestRecId) {
+      heuristAnnotation.manifestRecID = this.manifestRecId;
+    }
+
+    const url = buildAnnotationUrl(this.annotationServerUrl);
+
+    console.log('[HeuristAnnotationAdapter] POST', {
+      url,
+      heuristAnnotation
+    });
+
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json, application/ld+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(heuristAnnotation)
+    });
+
+    const data = await parseJsonResponse(response);
+
+    console.log('[HeuristAnnotationAdapter] create response', data);
+
+    assertWriteOk(response, data, 'create');
+
+    // MAE expects an AnnotationPage, not the saved record id.
+    return this.all();
   }
 
   async update(annotation) {
     console.log('[HeuristAnnotationAdapter] update', annotation);
-
+    //return;
     if (this.readonly) {
       throw new Error('HeuristAnnotationAdapter is readonly');
     }
 
-    const heuristAnnotation = this.normaliseAnnotationForHeurist(annotation);
+    if (!this.annotationServerUrl) {
+      throw new Error('Missing annotationServerUrl');
+    }
 
-    console.log('[HeuristAnnotationAdapter] update normalised for Heurist', heuristAnnotation);
+    const annotationId = getAnnotationId(annotation);
 
-    throw new Error('HeuristAnnotationAdapter.update is not implemented yet');
+    if (!annotationId) {
+      throw new Error('Cannot update annotation without id');
+    }
+
+    const heuristAnnotation = {
+      ...this.mapper.toWebAnnotation(annotation),
+      source: 'mirador'
+    };
+
+    if (this.manifestRecId) {
+      heuristAnnotation.manifestRecID = this.manifestRecId;
+    }
+
+    const url = buildAnnotationUrl(this.annotationServerUrl, annotationId);
+
+    console.log('[HeuristAnnotationAdapter] PUT', {
+      url,
+      annotationId,
+      heuristAnnotation
+    });
+
+    const response = await fetch(url, {
+      method: 'PUT',
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json, application/ld+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(heuristAnnotation)
+    });
+
+    const data = await parseJsonResponse(response);
+
+    console.log('[HeuristAnnotationAdapter] update response', data);
+
+    assertWriteOk(response, data, 'update');
+
+    // MAE expects an AnnotationPage.
+    return this.all();
   }
 
-  async delete(annotationId) {
-    console.log('[HeuristAnnotationAdapter] delete', annotationId);
+  async delete(annotationOrId) {
+    console.log('[HeuristAnnotationAdapter] delete', annotationOrId);
 
     if (this.readonly) {
       throw new Error('HeuristAnnotationAdapter is readonly');
     }
 
-    throw new Error('HeuristAnnotationAdapter.delete is not implemented yet');
+    if (!this.annotationServerUrl) {
+      throw new Error('Missing annotationServerUrl');
+    }
+
+    const annotationId = getAnnotationId(annotationOrId);
+
+    if (!annotationId) {
+      throw new Error('Cannot delete annotation without id');
+    }
+
+    const url = buildAnnotationUrl(this.annotationServerUrl, annotationId);
+
+    console.log('[HeuristAnnotationAdapter] DELETE', {
+      url,
+      annotationId
+    });
+
+    const response = await fetch(url, {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json'
+      }
+    });
+
+    const data = await parseJsonResponse(response);
+
+    console.log('[HeuristAnnotationAdapter] delete response', data);
+
+    assertWriteOk(response, data, 'delete');
+
+    // MAE expects an AnnotationPage.
+    return this.all();
   }
 }
