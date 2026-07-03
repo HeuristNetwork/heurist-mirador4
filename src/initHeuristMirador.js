@@ -1,3 +1,17 @@
+/**
+ * @file initHeuristMirador.js
+ * @brief Initializes Mirador v4 with MAE annotation support.
+ * @fileOverview Creates the Mirador viewer, configures the MAE annotation plugin, selects the appropriate annotation adapter, and optionally rewrites local IIIF manifest URLs for Vite development.
+ *
+ * @project     Mirador v4 integration/bundle for Heurist with MAE annotation support.
+ *
+ * @link https://HeuristNetwork.org
+ * @copyright (C) 2024 onwards Heurist Network
+ * @license https://www.gnu.org/licenses/gpl-3.0.txt GNU License 3.0
+ * @author Artem Osmakov <osmakov@gmail.com>
+ *
+ *
+ */
 import Mirador from 'mirador';
 import annotationPlugins from 'mirador-annotation-editor';
 import { LocalStorageAnnotationAdapter } from './LocalStorageAnnotationAdapter.js';
@@ -25,6 +39,12 @@ function createAnnotationAdapter(config, canvasId) {
 }
 
 
+/**
+ * Initialize the Heurist Mirador viewer.
+ *
+ * @param {Object} config Normalized viewer configuration.
+ * @returns {Promise<Object>} Mirador viewer instance.
+ */
 export async function initHeuristMirador(config) {
   if (!config.manifestUrl) {
     throw new Error('Missing manifestUrl in window.heuristMiradorConfig');

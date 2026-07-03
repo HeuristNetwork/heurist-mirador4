@@ -1,3 +1,17 @@
+/**
+ * @file HeuristMaeAnnotationMapper.js
+ * @brief Conversion layer between Heurist Web Annotation JSON and MAE annotation objects.
+ * @fileOverview Normalizes Heurist AnnotationPage responses for MAE, preserves MAE editor state where possible, rewrites canvas identifiers between viewer and canonical API forms, and wraps outgoing Web Annotation JSON in the field structure expected by Heurist.
+ *
+ * @project     Mirador v4 integration/bundle for Heurist with MAE annotation support.
+ *
+ * @link https://HeuristNetwork.org
+ * @copyright (C) 2024 onwards Heurist Network
+ * @license https://www.gnu.org/licenses/gpl-3.0.txt GNU License 3.0
+ * @author Artem Osmakov <osmakov@gmail.com>
+ *
+ *
+ */
 function trimTrailingSlash(value) {
   return String(value || '').replace(/\/+$/, '');
 }
@@ -346,12 +360,24 @@ function bodyValueFromMaeBody(body) {
  * actual Web Annotation under fields.annotation.
  */
 export class HeuristMaeAnnotationMapper {
+  /**
+   * Create a mapper for one viewer canvas.
+   *
+   * @param {Object} options Mapper options.
+   */
   constructor(options = {}) {
     this.canvasId = options.canvasId || null;
     this.lookupCanvasId = options.lookupCanvasId || this.canvasId;
     this.userLabel = options.userLabel || 'Heurist user';
   }
 
+  /**
+   * Convert a Vite-dev relative canvas URL to a canonical Heurist URL.
+   *
+   * @param {string} canvasId Canvas id from Mirador.
+   * @param {string} canonicalBaseUrl Canonical Heurist origin.
+   * @returns {string} Canonical canvas id when conversion is possible.
+   */
   static canonicalCanvasId(canvasId, canonicalBaseUrl) {
     if (!canvasId || typeof canvasId !== 'string' || !canonicalBaseUrl) {
       return canvasId;
@@ -364,10 +390,23 @@ export class HeuristMaeAnnotationMapper {
     return canvasId;
   }
 
+  /**
+   * Normalize a raw annotation API response to an AnnotationPage.
+   *
+   * @param {Object|Array|null} data Raw API response.
+   * @param {string} fallbackPageId AnnotationPage id to use when absent.
+   * @returns {Object|null} AnnotationPage or null.
+   */
   normalizePage(data, fallbackPageId) {
     return normalizeAnnotationPage(data, fallbackPageId);
   }
 
+  /**
+   * Convert one Heurist/Web Annotation to MAE format.
+   *
+   * @param {Object} annotation Web Annotation JSON.
+   * @returns {Object} MAE-compatible annotation.
+   */
   toMAE(annotation) {
     if (!annotation || typeof annotation !== 'object') {
       return annotation;
@@ -382,6 +421,12 @@ export class HeuristMaeAnnotationMapper {
     return this.toMaeNoteAnnotation(rewritten);
   }
 
+  /**
+   * Convert a note/commenting annotation to MAE multiple_body format.
+   *
+   * @param {Object} annotation Web Annotation JSON.
+   * @returns {Object} MAE note annotation.
+   */
   toMaeNoteAnnotation(annotation) {
     const textBody = firstTextBody(annotation);
     const tags = tagBodies(annotation);
@@ -425,6 +470,12 @@ export class HeuristMaeAnnotationMapper {
     };
   }
 
+  /**
+   * Convert a tagging annotation to MAE tagging format.
+   *
+   * @param {Object} annotation Web Annotation JSON.
+   * @returns {Object} MAE tagging annotation.
+   */
   toMaeTaggingAnnotation(annotation) {
     const maeTarget = maeTargetForAnnotation(annotation);
 
@@ -440,6 +491,12 @@ export class HeuristMaeAnnotationMapper {
     };
   }
 
+  /**
+   * Convert a Web Annotation AnnotationPage to MAE format.
+   *
+   * @param {Object} page AnnotationPage.
+   * @returns {Object} MAE-compatible AnnotationPage.
+   */
   pageToMAE(page) {
     if (!page || !Array.isArray(page.items)) {
       return page;
@@ -451,6 +508,15 @@ export class HeuristMaeAnnotationMapper {
     };
   }
 
+  /**
+   * Convert one MAE annotation into the Heurist fields payload.
+   *
+   * The returned object contains the root annotation key required by
+   * IiifAnnotationJson::parseIncomingAnnotation().
+   *
+   * @param {Object} annotation MAE annotation.
+   * @returns {Object} Heurist fields payload fragment.
+   */
   toWebAnnotation(annotation) {
     if (!annotation || typeof annotation !== 'object') {
       return annotation;
@@ -471,7 +537,6 @@ export class HeuristMaeAnnotationMapper {
    */
   toWebNoteAnnotation(annotation) {
     const textBody = firstTextBody(annotation);
-    const textValue = htmlToPlainText(textBody?.value || '');
     const htmlValue = textBody?.value || '';
 
     const webAnnotation = {
@@ -481,8 +546,8 @@ export class HeuristMaeAnnotationMapper {
       body: {
         purpose: 'describing',
         type: 'TextualBody',
-        value: htmlValue, //textValue,
-        format: 'text/html'  //'text/plain'
+        value: htmlValue,
+        format: 'text/html'
       },
       target: annotation.target
     };
@@ -577,6 +642,14 @@ export class HeuristMaeAnnotationMapper {
     );
   }
 
+  /**
+   * Rewrite canvas ids inside arbitrary annotation-related data.
+   *
+   * @param {*} value Value to rewrite.
+   * @param {string} fromCanvasId Source canvas id.
+   * @param {string} toCanvasId Destination canvas id.
+   * @returns {*} Rewritten value.
+   */
   replaceCanvasIdDeep(value, fromCanvasId, toCanvasId) {
     return replaceCanvasIdDeep(value, fromCanvasId, toCanvasId);
   }

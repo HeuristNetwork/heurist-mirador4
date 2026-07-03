@@ -1,3 +1,17 @@
+/**
+ * @file HeuristAnnotationAdapter.js
+ * @brief MAE storage adapter backed by the Heurist annotation API.
+ * @fileOverview Provides the adapter contract expected by mirador-annotation-editor. It loads AnnotationPage data from Heurist, maps Web Annotation JSON to MAE editor format, and sends create/update/delete operations back to the Heurist annotations endpoint.
+ *
+ * @project     Mirador v4 integration/bundle for Heurist with MAE annotation support.
+ *
+ * @link https://HeuristNetwork.org
+ * @copyright (C) 2024 onwards Heurist Network
+ * @license https://www.gnu.org/licenses/gpl-3.0.txt GNU License 3.0
+ * @author Artem Osmakov <osmakov@gmail.com>
+ *
+ *
+ */
 import { HeuristMaeAnnotationMapper } from './HeuristMaeAnnotationMapper.js';
 
 function trimTrailingSlash(value) {
@@ -41,7 +55,6 @@ async function parseJsonResponse(response) {
   try {
     return JSON.parse(text);
   } catch (error) {
-    console.warn('[HeuristAnnotationAdapter] non-JSON response', text);
     return null;
   }
 }
@@ -60,7 +73,18 @@ function assertWriteOk(response, data, action) {
   }
 }
 
+/**
+ * Storage adapter used by mirador-annotation-editor for Heurist-backed annotations.
+ *
+ * The adapter implements the MAE storage interface and delegates annotation
+ * shape conversion to HeuristMaeAnnotationMapper.
+ */
 export class HeuristAnnotationAdapter {
+  /**
+   * Create a Heurist-backed annotation adapter.
+   *
+   * @param {Object} options Adapter configuration.
+   */
   constructor(options = {}) {
     this.annotationServerUrl = options.annotationServerUrl || options.endpointUrl || null;
     this.db = options.db || null;
@@ -92,7 +116,6 @@ export class HeuristAnnotationAdapter {
       ? buildAnnotationPageUrl(this.annotationServerUrl, this.lookupCanvasId)
       : `heurist-annotation-page:${this.lookupCanvasId || this.canvasId || 'unknown-canvas'}`;
 
-    console.log('[HeuristAnnotationAdapter] created', {
       annotationServerUrl: this.annotationServerUrl,
       db: this.db,
       canvasId: this.canvasId,
@@ -104,21 +127,28 @@ export class HeuristAnnotationAdapter {
     });
   }
 
+  /**
+   * Return the MAE user label.
+   *
+   * @returns {string} User display label.
+   */
   getStorageAdapterUser() {
     return this.userLabel || 'Heurist user';
   }
 
+  /**
+   * Load all annotations for the current canvas.
+   *
+   * @returns {Promise<Object|null>} MAE-compatible AnnotationPage or null.
+   */
   async all() {
-    console.log('[HeuristAnnotationAdapter] all');
 
     if (!this.annotationServerUrl || !this.lookupCanvasId) {
-      console.warn('[HeuristAnnotationAdapter] missing annotationServerUrl or lookupCanvasId');
       return null;
     }
 
     const url = buildAnnotationPageUrl(this.annotationServerUrl, this.lookupCanvasId);
 
-    console.log('[HeuristAnnotationAdapter] fetch annotation page', {
       url,
       canvasId: this.canvasId,
       lookupCanvasId: this.lookupCanvasId
@@ -133,7 +163,6 @@ export class HeuristAnnotationAdapter {
     });
 
     if (!response.ok) {
-      console.warn('[HeuristAnnotationAdapter] annotation page fetch failed', {
         status: response.status,
         statusText: response.statusText,
         url
@@ -146,7 +175,6 @@ export class HeuristAnnotationAdapter {
     const page = this.mapper.normalizePage(data, url);
     const maePage = this.mapper.pageToMAE(page);
 
-    console.log('[HeuristAnnotationAdapter] annotation page', {
       raw: page,
       mae: maePage
     });
@@ -154,6 +182,12 @@ export class HeuristAnnotationAdapter {
     return maePage;
   }
 
+  /**
+   * Get one annotation from the current AnnotationPage.
+   *
+   * @param {string} annotationId Annotation identifier.
+   * @returns {Promise<Object|null>} Matching annotation or null.
+   */
   async get(annotationId) {
     const page = await this.all();
 
@@ -164,8 +198,13 @@ export class HeuristAnnotationAdapter {
     return page.items.find((item) => item.id === annotationId) || null;
   }
 
+  /**
+   * Create a Heurist annotation from a MAE annotation.
+   *
+   * @param {Object} annotation MAE annotation object.
+   * @returns {Promise<Object|null>} Refreshed MAE AnnotationPage.
+   */
   async create(annotation) {
-    console.log('[HeuristAnnotationAdapter] create', annotation);
 
     if (this.readonly) {
       throw new Error('HeuristAnnotationAdapter is readonly');
@@ -175,7 +214,6 @@ export class HeuristAnnotationAdapter {
       throw new Error('Missing annotationServerUrl');
     }
 
-    //console.log('[HeuristAnnotationAdapter] POST', annotation);
     //return;
 
     const heuristAnnotation = {
@@ -189,7 +227,6 @@ export class HeuristAnnotationAdapter {
 
     const url = buildAnnotationUrl(this.annotationServerUrl);
 
-    console.log('[HeuristAnnotationAdapter] POST', {
       url,
       heuristAnnotation
     });
@@ -206,7 +243,6 @@ export class HeuristAnnotationAdapter {
 
     const data = await parseJsonResponse(response);
 
-    console.log('[HeuristAnnotationAdapter] create response', data);
 
     assertWriteOk(response, data, 'create');
 
@@ -214,8 +250,13 @@ export class HeuristAnnotationAdapter {
     return this.all();
   }
 
+  /**
+   * Update an existing Heurist annotation from a MAE annotation.
+   *
+   * @param {Object} annotation MAE annotation object.
+   * @returns {Promise<Object|null>} Refreshed MAE AnnotationPage.
+   */
   async update(annotation) {
-    console.log('[HeuristAnnotationAdapter] update', annotation);
     //return;
     if (this.readonly) {
       throw new Error('HeuristAnnotationAdapter is readonly');
@@ -242,7 +283,6 @@ export class HeuristAnnotationAdapter {
 
     const url = buildAnnotationUrl(this.annotationServerUrl, annotationId);
 
-    console.log('[HeuristAnnotationAdapter] PUT', {
       url,
       annotationId,
       heuristAnnotation
@@ -260,7 +300,6 @@ export class HeuristAnnotationAdapter {
 
     const data = await parseJsonResponse(response);
 
-    console.log('[HeuristAnnotationAdapter] update response', data);
 
     assertWriteOk(response, data, 'update');
 
@@ -268,8 +307,13 @@ export class HeuristAnnotationAdapter {
     return this.all();
   }
 
+  /**
+   * Delete an annotation from Heurist.
+   *
+   * @param {Object|string} annotationOrId MAE annotation object or annotation id.
+   * @returns {Promise<Object|null>} Refreshed MAE AnnotationPage.
+   */
   async delete(annotationOrId) {
-    console.log('[HeuristAnnotationAdapter] delete', annotationOrId);
 
     if (this.readonly) {
       throw new Error('HeuristAnnotationAdapter is readonly');
@@ -287,7 +331,6 @@ export class HeuristAnnotationAdapter {
 
     const url = buildAnnotationUrl(this.annotationServerUrl, annotationId);
 
-    console.log('[HeuristAnnotationAdapter] DELETE', {
       url,
       annotationId
     });
@@ -302,7 +345,6 @@ export class HeuristAnnotationAdapter {
 
     const data = await parseJsonResponse(response);
 
-    console.log('[HeuristAnnotationAdapter] delete response', data);
 
     assertWriteOk(response, data, 'delete');
 

@@ -1,3 +1,17 @@
+/**
+ * @file iiifDevUrlRewrite.js
+ * @brief Rewrites local Heurist IIIF URLs for Vite development.
+ * @fileOverview Fetches a manifest through the Vite dev server and rewrites absolute localhost Heurist URLs to proxy-relative URLs. The rewritten manifest is returned as a Blob URL for Mirador to load.
+ *
+ * @project     Mirador v4 integration/bundle for Heurist with MAE annotation support.
+ *
+ * @link https://HeuristNetwork.org
+ * @copyright (C) 2024 onwards Heurist Network
+ * @license https://www.gnu.org/licenses/gpl-3.0.txt GNU License 3.0
+ * @author Artem Osmakov <osmakov@gmail.com>
+ *
+ *
+ */
 function isLocalHeuristUrl(value) {
   return (
     typeof value === 'string' &&
@@ -18,8 +32,13 @@ function rewriteLocalHeuristUrl(value) {
     .replace('http://localhost/heurist/', '/heurist/');
 }
 
+/**
+ * Recursively rewrite local Heurist URLs in an IIIF manifest-like value.
+ *
+ * @param {*} value Value to inspect.
+ * @returns {*} Rewritten value.
+ */
 export function rewriteIiifUrlsForViteDev(value) {
-//console.log(value);    
   if (Array.isArray(value)) {
     return value.map((item) => rewriteIiifUrlsForViteDev(item));
   }
@@ -41,6 +60,12 @@ export function rewriteIiifUrlsForViteDev(value) {
   return value;
 }
 
+/**
+ * Create a Blob URL for a locally rewritten IIIF manifest.
+ *
+ * @param {string} manifestUrl Manifest URL to fetch.
+ * @returns {Promise<string>} Blob URL containing the rewritten manifest JSON.
+ */
 export async function createDevManifestUrl(manifestUrl) {
   const response = await fetch(manifestUrl, {
     credentials: 'include'

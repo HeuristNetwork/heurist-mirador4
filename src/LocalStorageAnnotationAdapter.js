@@ -1,4 +1,29 @@
+/**
+ * @file LocalStorageAnnotationAdapter.js
+ * @brief MAE storage adapter using browser localStorage.
+ * @fileOverview Provides a development and fallback annotation adapter for mirador-annotation-editor. It stores one AnnotationPage per canvas in localStorage and implements the same storage methods used by the Heurist-backed adapter.
+ *
+ * @project     Mirador v4 integration/bundle for Heurist with MAE annotation support.
+ *
+ * @link https://HeuristNetwork.org
+ * @copyright (C) 2024 onwards Heurist Network
+ * @license https://www.gnu.org/licenses/gpl-3.0.txt GNU License 3.0
+ * @author Artem Osmakov <osmakov@gmail.com>
+ *
+ *
+ */
+/**
+ * LocalStorage-backed adapter for mirador-annotation-editor.
+ *
+ * This adapter is useful for local development and isolated MAE testing because
+ * it requires no Heurist API.
+ */
 export class LocalStorageAnnotationAdapter {
+  /**
+   * Create a localStorage annotation adapter.
+   *
+   * @param {Object} options Adapter options.
+   */
   constructor(options = {}) {
     this.canvasId = options.canvasId || 'unknown-canvas';
     this.userLabel = options.userLabel || 'Anonymous User';
@@ -8,15 +33,18 @@ export class LocalStorageAnnotationAdapter {
       options.annotationPageId ||
       `heurist-mirador4-annotation-page:${this.canvasId}`;
 
-    console.log('[LocalStorageAnnotationAdapter] created', {
       canvasId: this.canvasId,
       annotationPageId: this.annotationPageId,
       userLabel: this.userLabel
     });
   }
 
+  /**
+   * Return the MAE user label.
+   *
+   * @returns {string} User label.
+   */
   getStorageAdapterUser() {
-    console.log('[LocalStorageAnnotationAdapter] getStorageAdapterUser');
     return this.userLabel;
   }
 
@@ -33,7 +61,6 @@ export class LocalStorageAnnotationAdapter {
       const raw = window.localStorage.getItem(this.annotationPageId);
 
       if (!raw) {
-        console.log('[LocalStorageAnnotationAdapter] _readPage empty');
         return null;
       }
 
@@ -58,7 +85,6 @@ export class LocalStorageAnnotationAdapter {
 
       return parsed;
     } catch (error) {
-      console.warn('[LocalStorageAnnotationAdapter] failed to read localStorage', error);
       return null;
     }
   }
@@ -70,20 +96,29 @@ export class LocalStorageAnnotationAdapter {
       items: Array.isArray(annotationPage.items) ? annotationPage.items : []
     };
 
-    console.log('[LocalStorageAnnotationAdapter] _writePage', page);
     window.localStorage.setItem(this.annotationPageId, JSON.stringify(page));
 
     return page;
   }
 
+  /**
+   * Load the current canvas AnnotationPage.
+   *
+   * @returns {Promise<Object|null>} Stored AnnotationPage or null.
+   */
   async all() {
     const page = this._readPage();
 
-    console.log('[LocalStorageAnnotationAdapter] all', page);
 
     return page;
   }
 
+  /**
+   * Get one annotation by id.
+   *
+   * @param {string} annotationId Annotation id.
+   * @returns {Promise<Object|null>} Matching annotation or null.
+   */
   async get(annotationId) {
     const page = this._readPage();
 
@@ -94,8 +129,13 @@ export class LocalStorageAnnotationAdapter {
     return page.items.find((item) => item.id === annotationId) || null;
   }
 
+  /**
+   * Create a new annotation in localStorage.
+   *
+   * @param {Object} annotation MAE annotation.
+   * @returns {Promise<Object>} Updated AnnotationPage.
+   */
   async create(annotation) {
-    console.log('[LocalStorageAnnotationAdapter] create', annotation);
 
     const page = this._readPage() || this._emptyAnnotationPage();
 
@@ -104,8 +144,13 @@ export class LocalStorageAnnotationAdapter {
     return this._writePage(page);
   }
 
+  /**
+   * Update an existing annotation in localStorage.
+   *
+   * @param {Object} annotation MAE annotation.
+   * @returns {Promise<Object>} Updated AnnotationPage.
+   */
   async update(annotation) {
-    console.log('[LocalStorageAnnotationAdapter] update', annotation);
 
     const page = this._readPage() || this._emptyAnnotationPage();
 
@@ -120,8 +165,13 @@ export class LocalStorageAnnotationAdapter {
     return this._writePage(page);
   }
 
+  /**
+   * Delete one annotation from localStorage.
+   *
+   * @param {string} annotationId Annotation id.
+   * @returns {Promise<Object>} Updated AnnotationPage.
+   */
   async delete(annotationId) {
-    console.log('[LocalStorageAnnotationAdapter] delete', annotationId);
 
     const page = this._readPage() || this._emptyAnnotationPage();
 

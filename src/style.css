@@ -1,3 +1,17 @@
+/**
+ * @file style.css
+ * @brief Base layout styles for the Mirador container.
+ * @fileOverview Ensures the Mirador root container fills the browser viewport and prevents body scrolling around the embedded viewer.
+ *
+ * @project     Mirador v4 integration/bundle for Heurist with MAE annotation support.
+ *
+ * @link https://HeuristNetwork.org
+ * @copyright (C) 2024 onwards Heurist Network
+ * @license https://www.gnu.org/licenses/gpl-3.0.txt GNU License 3.0
+ * @author Artem Osmakov <osmakov@gmail.com>
+ *
+ *
+ */
 html,
 body,
 #mirador {
