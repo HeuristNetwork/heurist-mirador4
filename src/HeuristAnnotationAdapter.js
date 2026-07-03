@@ -116,15 +116,6 @@ export class HeuristAnnotationAdapter {
       ? buildAnnotationPageUrl(this.annotationServerUrl, this.lookupCanvasId)
       : `heurist-annotation-page:${this.lookupCanvasId || this.canvasId || 'unknown-canvas'}`;
 
-      annotationServerUrl: this.annotationServerUrl,
-      db: this.db,
-      canvasId: this.canvasId,
-      lookupCanvasId: this.lookupCanvasId,
-      manifestRecId: this.manifestRecId,
-      canvasRecId: this.canvasRecId,
-      annotationPageId: this.annotationPageId,
-      readonly: this.readonly
-    });
   }
 
   /**
@@ -149,11 +140,6 @@ export class HeuristAnnotationAdapter {
 
     const url = buildAnnotationPageUrl(this.annotationServerUrl, this.lookupCanvasId);
 
-      url,
-      canvasId: this.canvasId,
-      lookupCanvasId: this.lookupCanvasId
-    });
-
     const response = await fetch(url, {
       method: 'GET',
       credentials: 'include',
@@ -163,21 +149,12 @@ export class HeuristAnnotationAdapter {
     });
 
     if (!response.ok) {
-        status: response.status,
-        statusText: response.statusText,
-        url
-      });
-
       return null;
     }
 
     const data = await response.json();
     const page = this.mapper.normalizePage(data, url);
     const maePage = this.mapper.pageToMAE(page);
-
-      raw: page,
-      mae: maePage
-    });
 
     return maePage;
   }
@@ -226,10 +203,6 @@ export class HeuristAnnotationAdapter {
     }
 
     const url = buildAnnotationUrl(this.annotationServerUrl);
-
-      url,
-      heuristAnnotation
-    });
 
     const response = await fetch(url, {
       method: 'POST',
@@ -283,11 +256,6 @@ export class HeuristAnnotationAdapter {
 
     const url = buildAnnotationUrl(this.annotationServerUrl, annotationId);
 
-      url,
-      annotationId,
-      heuristAnnotation
-    });
-
     const response = await fetch(url, {
       method: 'PUT',
       credentials: 'include',
@@ -330,10 +298,6 @@ export class HeuristAnnotationAdapter {
     }
 
     const url = buildAnnotationUrl(this.annotationServerUrl, annotationId);
-
-      url,
-      annotationId
-    });
 
     const response = await fetch(url, {
       method: 'DELETE',

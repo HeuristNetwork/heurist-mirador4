@@ -32,11 +32,6 @@ export class LocalStorageAnnotationAdapter {
     this.annotationPageId =
       options.annotationPageId ||
       `heurist-mirador4-annotation-page:${this.canvasId}`;
-
-      canvasId: this.canvasId,
-      annotationPageId: this.annotationPageId,
-      userLabel: this.userLabel
-    });
   }
 
   /**
