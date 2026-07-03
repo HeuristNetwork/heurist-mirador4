@@ -40,6 +40,7 @@ function firstTextBody(annotation) {
   return (
     bodies.find((body) => body?.purpose === 'describing') ||
     bodies.find((body) => body?.type === 'TextualBody' && body?.purpose !== 'tagging') ||
+    bodies.find((body) => body && typeof body === 'object' && Object.prototype.hasOwnProperty.call(body, 'value')) ||
     annotation?.maeData?.textBody ||
     null
   );
@@ -90,20 +91,14 @@ function replaceCanvasIdInString(value, fromCanvasId, toCanvasId) {
     return toCanvasId;
   }
 
-  // Canvas id with fragment selector:
-  // <canvasId>#xywh=...
   if (value.startsWith(`${fromCanvasId}#`)) {
     return `${toCanvasId}${value.substring(fromCanvasId.length)}`;
   }
 
-  // Canvas id with query:
-  // <canvasId>?...
   if (value.startsWith(`${fromCanvasId}?`)) {
     return `${toCanvasId}${value.substring(fromCanvasId.length)}`;
   }
 
-  // MAE-generated annotation ids:
-  // <canvasId>/annotation/{uuid}
   if (value.startsWith(`${fromCanvasId}/`)) {
     return `${toCanvasId}${value.substring(fromCanvasId.length)}`;
   }
@@ -222,19 +217,6 @@ function svgSelectorValue(target) {
   return selector?.value || null;
 }
 
-function fragmentSelectorValue(target) {
-  const selector = selectorArray(target).find((item) => item?.type === 'FragmentSelector');
-  return selector?.value || null;
-}
-
-function targetSource(target) {
-  if (!target || typeof target !== 'object') {
-    return null;
-  }
-
-  return target.source || null;
-}
-
 function buildRectangleSvg(shape, fullCanvaXYWH = null) {
   let svgWidth = Math.ceil(shape.x + shape.width);
   let svgHeight = Math.ceil(shape.y + shape.height);
@@ -342,17 +324,26 @@ function normalizeMaeTags(tags) {
   }));
 }
 
+function bodyValueFromMaeBody(body) {
+  if (typeof body === 'string') {
+    return body;
+  }
+
+  if (body && typeof body === 'object') {
+    return body.value || body.id || body.label || '';
+  }
+
+  return '';
+}
+
 /**
  * Converts between Heurist/Web Annotation JSON and the MAE-specific annotation
  * shape expected by mirador-annotation-editor.
  *
- * Important:
- * - Annotation editor mode is controlled by motivation/templateType, not by
- *   target shape. A note/comment annotation may have a string #xywh target or
- *   a complex object target with SvgSelector.
- * - Target geometry is preserved where possible.
- * - Canvas ids are rewritten both ways so Vite-dev relative ids can still use
- *   canonical Heurist ids for API lookup/save.
+ * Important for Heurist save:
+ * DbAnnotations::prepareImportedAnnotation() passes fields to
+ * IiifAnnotationJson::parseIncomingAnnotation(), and that parser expects the
+ * actual Web Annotation under fields.annotation.
  */
 export class HeuristMaeAnnotationMapper {
   constructor(options = {}) {
@@ -361,10 +352,6 @@ export class HeuristMaeAnnotationMapper {
     this.userLabel = options.userLabel || 'Heurist user';
   }
 
-  /**
-   * Converts a relative local Heurist canvas URL to the canonical URL used by
-   * Heurist annotation lookup.
-   */
   static canonicalCanvasId(canvasId, canonicalBaseUrl) {
     if (!canvasId || typeof canvasId !== 'string' || !canonicalBaseUrl) {
       return canvasId;
@@ -377,16 +364,10 @@ export class HeuristMaeAnnotationMapper {
     return canvasId;
   }
 
-  /**
-   * Normalizes a raw API response to AnnotationPage.
-   */
   normalizePage(data, fallbackPageId) {
     return normalizeAnnotationPage(data, fallbackPageId);
   }
 
-  /**
-   * Heurist/Web Annotation -> MAE annotation.
-   */
   toMAE(annotation) {
     if (!annotation || typeof annotation !== 'object') {
       return annotation;
@@ -401,11 +382,7 @@ export class HeuristMaeAnnotationMapper {
     return this.toMaeNoteAnnotation(rewritten);
   }
 
-  /**
-   * Heurist/Web Annotation note/comment annotation -> MAE multiple_body annotation.
-   */
   toMaeNoteAnnotation(annotation) {
-    const originalBodies = asArray(annotation.body);
     const textBody = firstTextBody(annotation);
     const tags = tagBodies(annotation);
 
@@ -448,16 +425,13 @@ export class HeuristMaeAnnotationMapper {
     };
   }
 
-  /**
-   * Heurist/Web Annotation tag annotation -> MAE tagging annotation.
-   */
   toMaeTaggingAnnotation(annotation) {
     const maeTarget = maeTargetForAnnotation(annotation);
 
     return {
       ...annotation,
       creator: normalizeCreatorForMae(annotation.creator, this.userLabel),
-      motivation: 'tagging',
+      motivation: annotation.motivation || 'tagging',
       maeData: {
         ...(annotation.maeData || {}),
         templateType: 'tagging',
@@ -466,9 +440,6 @@ export class HeuristMaeAnnotationMapper {
     };
   }
 
-  /**
-   * AnnotationPage from Heurist/Web Annotation API -> MAE AnnotationPage.
-   */
   pageToMAE(page) {
     if (!page || !Array.isArray(page.items)) {
       return page;
@@ -480,9 +451,6 @@ export class HeuristMaeAnnotationMapper {
     };
   }
 
-  /**
-   * MAE annotation -> Heurist/Web Annotation.
-   */
   toWebAnnotation(annotation) {
     if (!annotation || typeof annotation !== 'object') {
       return annotation;
@@ -496,36 +464,88 @@ export class HeuristMaeAnnotationMapper {
   }
 
   /**
-   * MAE multiple_body note/comment annotation -> Web Annotation for Heurist.
+   * MAE multiple_body note/comment annotation -> Heurist fields payload.
+   *
+   * Current temporary rule: strip note tags from the Web Annotation body.
+   * The raw MAE metadata is kept so the editor state can still round-trip.
    */
   toWebNoteAnnotation(annotation) {
     const textBody = firstTextBody(annotation);
-    const tags = tagBodies(annotation);
     const textValue = htmlToPlainText(textBody?.value || '');
-
-    const normalizedTags = tags
-      .map((tag) => ({
-        id: tag.id || tag.value || tag.label || undefined,
-        type: 'TextualBody',
-        purpose: 'tagging',
-        value: tag.value || tag.id || tag.label || ''
-      }))
-      .filter((tag) => tag.value !== '');
-
-    const body = [
-      {
-        purpose: 'describing',
-        type: 'TextualBody',
-        value: textValue,
-        format: 'text/plain'
-      },
-      ...normalizedTags
-    ];
+    const htmlValue = textBody?.value || '';
 
     const webAnnotation = {
       id: annotation.id,
       type: 'Annotation',
       motivation: annotation.motivation || 'commenting',
+      body: {
+        purpose: 'describing',
+        type: 'TextualBody',
+        value: htmlValue, //textValue,
+        format: 'text/html'  //'text/plain'
+      },
+      target: annotation.target
+    };
+
+    if (annotation.created) {
+      webAnnotation.created = annotation.created;
+    }
+
+    if (annotation.modified) {
+      webAnnotation.modified = annotation.modified;
+    }
+
+    if (annotation.creationDate) {
+      webAnnotation.creationDate = annotation.creationDate;
+    }
+
+    if (annotation.creator) {
+      webAnnotation.creator = annotation.creator;
+    }
+
+    if (annotation.maeData) {
+      webAnnotation.maeData = annotation.maeData;
+    }
+
+    return replaceCanvasIdDeep(
+      { annotation: webAnnotation },
+      this.canvasId,
+      this.lookupCanvasId
+    );
+  }
+
+  /**
+   * MAE tagging annotation -> Heurist fields payload.
+   *
+   * Keep MAE motivation as-is. The Heurist parser can digest a Web Annotation
+   * body object if it has a value, so preserve MAE's body as much as possible.
+   */
+  toWebTaggingAnnotation(annotation) {
+    let body = annotation.body;
+
+    if (typeof body === 'string') {
+      body = {
+        type: 'TextualBody',
+        value: htmlToPlainText(body),
+        format: 'text/plain'
+      };
+    } else if (body && typeof body === 'object' && Object.prototype.hasOwnProperty.call(body, 'value')) {
+      body = {
+        ...body,
+        value: htmlToPlainText(bodyValueFromMaeBody(body))
+      };
+    } else {
+      body = {
+        type: 'TextualBody',
+        value: '',
+        format: 'text/plain'
+      };
+    }
+
+    const webAnnotation = {
+      id: annotation.id,
+      type: 'Annotation',
+      motivation: annotation.motivation || 'tagging',
       body,
       target: annotation.target
     };
@@ -547,67 +567,16 @@ export class HeuristMaeAnnotationMapper {
     }
 
     if (annotation.maeData) {
-      // Preserve rich MAE editor metadata for round-tripping. Heurist can store
-      // this in raw annotation JSON even if only selected fields are indexed.
       webAnnotation.maeData = annotation.maeData;
     }
 
-    return replaceCanvasIdDeep(webAnnotation, this.canvasId, this.lookupCanvasId);
+    return replaceCanvasIdDeep(
+      { annotation: webAnnotation },
+      this.canvasId,
+      this.lookupCanvasId
+    );
   }
 
-  /**
-   * MAE tagging annotation -> Web Annotation for Heurist.
-   */
-  toWebTaggingAnnotation(annotation) {
-    const rawBody = annotation.body;
-
-    let bodyValue = '';
-
-    if (typeof rawBody === 'string') {
-      bodyValue = rawBody;
-    } else if (rawBody && typeof rawBody === 'object') {
-      bodyValue = rawBody.value || rawBody.id || rawBody.label || '';
-    }
-
-    const webAnnotation = {
-      id: annotation.id,
-      type: 'Annotation',
-      motivation: 'tagging',
-      body: {
-        type: 'TextualBody',
-        purpose: 'tagging',
-        value: htmlToPlainText(bodyValue),
-        format: 'text/plain'
-      },
-      target: annotation.target
-    };
-
-    if (annotation.created) {
-      webAnnotation.created = annotation.created;
-    }
-
-    if (annotation.modified) {
-      webAnnotation.modified = annotation.modified;
-    }
-
-    if (annotation.creationDate) {
-      webAnnotation.creationDate = annotation.creationDate;
-    }
-
-    if (annotation.creator) {
-      webAnnotation.creator = annotation.creator;
-    }
-
-    if (annotation.maeData) {
-      webAnnotation.maeData = annotation.maeData;
-    }
-
-    return replaceCanvasIdDeep(webAnnotation, this.canvasId, this.lookupCanvasId);
-  }
-
-  /**
-   * Utility exposed for tests/debugging.
-   */
   replaceCanvasIdDeep(value, fromCanvasId, toCanvasId) {
     return replaceCanvasIdDeep(value, fromCanvasId, toCanvasId);
   }
