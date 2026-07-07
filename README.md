@@ -44,7 +44,7 @@ Current dependency baseline:
 ```json
 {
   "mirador": "^4.1.0",
-  "mirador-annotation-editor": "1.2.1",
+  "mirador-annotation-editor": "1.3.0",
   "react": "^19.2.0",
   "react-dom": "^19.2.0",
   "@mui/material": "^7.3.5",
@@ -293,16 +293,7 @@ Current workflow decisions:
 - MAE `motivation` is preserved as supplied by MAE.
 - MAE-specific metadata is kept in raw annotation JSON so the editor can reopen existing annotations.
 
-## 8. Known MAE issues to monitor
-
-Observed MAE behavior that may need upstream reporting or local workarounds:
-
-1. When annotation edit starts, moving the cursor over the canvas may immediately enter drawing mode.
-2. MAE appears to allow only one editor form open. When the user switches to another canvas while the editor is open, the current editor form is hidden but can block opening a new editor for another annotation.
-
-These were reported as separate issues to the MAE GitHub repository.
-
-## 9. Build and development commands
+## 8. Build and development commands
 
 Common commands:
 
